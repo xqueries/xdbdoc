@@ -1,0 +1,127 @@
+\section{Engine}
+\label{sec:engine}
+
+\subsection{Storage}
+\label{sec:storage}
+
+\subsubsection{Pages}
+\label{sec:pages}
+A page is a simple key-value storage.
+We are using slotted pages for \xdb{}.
+Slotted pages are explained in detail in a lot of literature, so we are just summarizing how we implemented them.
+There is a bytefield showcasing the structure in \autoref{fig:single_page}.
+An \xdb{} page has a size of $64KiB$, of which the first sixteen bytes are the page header.
+
+In the following, we refer to field byte layouts with Go terms, always to be interpreted as big-endian encoded.
+This means, that if we refer to a field as \go{uint32}, it means that the field contains unsigned 4-byte integer data.
+
+\paragraph{ID}
+The first and most important field is the \emph{ID} field.
+This field is an \go{uint32} field, containing the ID of this page.
+
+\paragraph{Cell count}
+The amount of cells stored in that page.
+This is always equivalent to the amount of slots in the page.
+The field has a \go{uint16} type.
+In \autoref{fig:single_page}, this field has the value \go{0x00 0x03}.
+
+\paragraph{First free block}
+The offset of the \emph{free space} block in this page.
+The field has a \go{uint16} type.
+In \autoref{fig:single_page}, this field has the value \go{0x00 0x77} ($= 119$), which is the first byte of \emph{free space}.
+
+\paragraph{Overflow}
+A \go{uint32} which holds a page ID.
+A value of \go{0x00 0x00 0x00 0x00} means, that this page does not have an overflow page allocated.
+If this field holds any other value than $0$, then that is the ID of the overflow page.
+
+\paragraph{reserved}
+Currently, a part of the header is reserved for future use.
+This is, because during the development process, quite a few fields have come and go, and each time, it was a huge pain to re-align all the bytes in our tests.
+With the reserved space, we have space for adding and removing new header fields, without having to touch all offsets throughout the whole page.
+
+\paragraph{Cells}
+On a more abstract level, a single cell is a key-value pair.
+The key is always arbitrary data, however, the value is not.
+There are two types of cells, record cells (\autoref{fig:single_record_cell}) and pointer cells (\autoref{fig:single_pointer_cell}).
+Record cells have arbitrary data as their value, pointer cells hold a \go{uint32} value, which is a valid page ID.
+Thus, pointer cells point to another page, while record cells hold data.
+
+Cells are stored in the order that they were inserted.
+In \autoref{fig:single_page}, the insertion order was $1 \rightarrow 2 \rightarrow 3$.
+
+\paragraph{Slots}
+Slots are the entry points of a page.
+They consist of an offset and a size, as can be seen in \autoref{fig:single_slot}.
+The offset is a \go{uint16} pointing to some cell within the same page, while the size is a \go{uint16} describing the length of that cell.
+
+Unlike cells, slots are not stored in the order that they were inserted, but they are always sorted by the cell key that they point to.
+In \autoref{fig:single_page}, the cell keys seem to have the relation $key(cell 2) < key(cell 3) < key(cell 1)$.
+
+
+\begin{figure}
+    \centering
+    \begin{bytefield}[bitwidth=2em]{16}
+        \bitheader{0-15} \\
+        \begin{rightwordgroup}{Page \\ Header}
+            \bitbox{4}{ID} & \bitbox{2}{\tiny cell count} & \bitbox{2}{\tiny first free \\ block}
+            & \bitbox{4}{overflow}
+            & \bitbox{4}{\textit{reserved}}
+        \end{rightwordgroup} \\
+        \wordbox{3}{cell 1} \\
+        \wordbox{1}{cell 2} \\
+        \wordbox[tlr]{2}{cell 3} \\
+        \bitbox[blr]{7}{} &
+        \bitbox[tlr]{9}{} \\
+        \wordbox[lr]{2}{free space} \\
+        \skippedwords{} \\
+        \wordbox[lr]{1}{} \\
+        \bitbox[blr]{4}{} &
+        \bitbox{4}{slot 2} &
+        \bitbox{4}{slot 3} &
+        \bitbox{4}{slot 1} \\
+    \end{bytefield}
+    \caption{A single page}
+    \label{fig:single_page}
+\end{figure}
+
+\begin{figure}
+    \centering
+    \begin{bytefield}[bitwidth=3em]{4}
+        \bitheader{0-3} \\
+        \bitbox{2}{offset} & \bitbox{2}{size}
+    \end{bytefield}
+    \caption{A single slot}
+    \label{fig:single_slot}
+\end{figure}
+
+\begin{figure}
+    \centering
+    \begin{bytefield}[bitwidth=2em]{8}
+        \bitheader{0-7} \\
+        \bitbox{1}{\tiny type \\ = 1} &
+        \bitbox{4}{key frame} &
+        \bitbox[tlr]{3}{} \\
+        \wordbox[blr]{1}{key} \\
+        \bitbox{4}{record frame} &
+        \bitbox[tlr]{4}{} \\
+        \wordbox[blr]{2}{record}
+    \end{bytefield}
+    \caption{A record cell}
+    \label{fig:single_record_cell}
+\end{figure}
+
+\begin{figure}
+    \centering
+    \begin{bytefield}[bitwidth=2em]{8}
+        \bitheader{0-7} \\
+        \bitbox{1}{\tiny type \\ = 2} &
+        \bitbox{4}{key frame} &
+        \bitbox[tlr]{3}{} \\
+        \wordbox[lr]{1}{key} \\
+        \bitbox[blr]{4}{} &
+        \bitbox{4}{pointer}
+    \end{bytefield}
+    \caption{A pointer cell}
+    \label{fig:single_pointer_cell}
+\end{figure}
