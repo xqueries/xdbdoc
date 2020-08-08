@@ -1,0 +1,8 @@
+\section{Introduction}
+This document is intended for developers of \add{}, as well as people who are interested in the mechanics of the database application.
+It will provide detailed insight into the ways the application was designed, and how to leverage and understand them.
+
+The database is fully written in Go.
+In some places, we used assembler code to improve performance, however, there will always be Go code as a fallback, which will have the same (tested) functionality as the assembler implementation.
+
+\textbf{Please note that we are not going to talk about basic features of Go. If you are reading this document, we already assume, that you have good knowledge and quite a bit of experience with Go.}

@@ -1,0 +1,63 @@
+\section{Parser}
+\label{sec:parser}
+The parser is the first component, that any SQL statement encounters.
+It consists of the parser logic, as well as a scanner (\autoref{sec:scanner}), which is responsible for splitting the text into actual tokens.
+
+For simplicity reasons, and a special feature of the Go runtime, we decided to not follow the usual, quite heavyweight approach for a parser, which we showcase in \autoref{fig:heavyweight_parser_arch}.
+Instead, we use the approach showcased in \autoref{fig:lightweight_parser_arch}.
+We discard the interpreter, because we decided to use the parse tree as an input to a compiler, which then generates an intermediary representation (\autoref{sec:intermediary_representation}), that the engine can execute.
+
+\begin{figure}
+    \centering
+    \begin{subfigure}{.5\textwidth}
+        \centering
+        \begin{tikzpicture}[node distance = 3em, auto]
+        % nodes
+        \node [cloud] (input) {SQL input};
+        \node [block, below of=input] (decode) {decoder};
+        \node [block, below of=decode] (tokenize) {tokenizer};
+        \node [block, below of=tokenize] (parse) {parser};
+        \node [cloud, below of=parse] (parsetree) {parse tree};
+        \node [block, below of=parsetree] (interpret) {interpreter};
+        \node [cloud, below of=interpret] (ast) {AST};
+        % edges
+        \path [line] (input) -- (decode);
+        \path [line] (decode) -- (tokenize);
+        \path [line] (tokenize) -- (parse);
+        \path [line] (parse) -- (parsetree);
+        \path [line] (parsetree) -- (interpret);
+        \path [line] (interpret) -- (ast);
+        \end{tikzpicture}
+        \caption{Heavyweight parser architecture}
+        \label{fig:heavyweight_parser_arch}
+    \end{subfigure}%
+    \begin{subfigure}{.5\textwidth}
+        \centering
+        \begin{tikzpicture}[node distance = 3em, auto]
+        % nodes
+        \node [cloud] (input) {SQL input};
+        \node [block, below of=input] (tokenize) {tokenizer};
+        \node [block, below of=tokenize] (parse) {parser};
+        \node [cloud, below of=parse] (parsetree) {parse tree};
+        % edges
+        \path [line] (input) -- (tokenize);
+        \path [line] (tokenize) -- (parse);
+        \path [line] (parse) -- (parsetree);
+        \end{tikzpicture}
+        \caption{Lightweight parser architecture}
+        \label{fig:lightweight_parser_arch}
+    \end{subfigure}
+    \caption{Both parser architectures}
+    \label{fig:parser_archs}
+\end{figure}
+
+Despite it is shown in \autoref{fig:lightweight_parser_arch}, we don't really skip the decoder, but it is not an actual component in the database.
+The Go runtime can convert \mintinline{go}{[]byte} input into \mintinline{go}{[]rune}, which are UTF-8 characters.
+If the input string is not a valid UTF-8 string, then the input will not be converted at all.
+An example for an invalid UTF-8 string would be \mintinline{go}{"hello\xf3world"}, whereas \mintinline{go}{"hello\u00f3world"} would be very valid.
+
+For parsing, we use the parser, which produces a parse tree.
+For simplicity reasons, we call that parse tree \textit{AST} (Abstract Syntax Tree) in our implementation.
+
+\subsection{Scanner}
+\label{sec:scanner}

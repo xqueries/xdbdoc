@@ -1,0 +1,35 @@
+\documentclass[11pt,a4paper]{scrartcl}
+
+\input{packages}
+\input{commands}
+
+% \titlehead{header}
+\subject{Technical Reference}
+\title{\add{} - A Distributed Database}
+\author{the \add{} team}
+\date{built \today}
+\publishers{test}
+
+\begin{document}
+
+\pagenumbering{roman}
+
+\clearpage\maketitle
+\thispagestyle{empty}
+\newpage
+
+\setcounter{page}{1}
+\tableofcontents
+\newpage
+
+\pagenumbering{arabic}
+\setcounter{page}{1}
+
+\include{content/introduction}
+\include{content/parser}
+\include{content/compiler}
+\include{content/engine}
+\include{content/driver}
+\include{content/tools}
+
+\end{document}
