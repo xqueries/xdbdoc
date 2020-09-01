@@ -1,15 +1,28 @@
 \section{Engine}
 \label{sec:engine}
 
+\subsection{Type system}
+\label{sec:types}
+\todo[inline]{write}
+
+\paragraph{Type indicator bytes}
+\label{par:type_indicator_bytes}
+\todo[inline]{write}
+
 \subsection{Storage}
 \label{sec:storage}
+The engine stores all data associated with a database in a single file.
+Neither the name nor the ending of the file is defined.
+The engine just needs to be able to read from and write to it.
+The latter requirement might be removed at some point.
+The whole database file is made up of pages.
 
 \subsubsection{Pages}
 \label{sec:pages}
 A page is a simple key-value storage.
 We are using slotted pages for \xdb{}.
 Slotted pages are explained in detail in a lot of literature, so we are just summarizing how we implemented them.
-There is a bytefield showcasing the structure in \autoref{fig:single_page}.
+There is a bytefield showcasing the structure in \ref{fig:single_page}.
 An \xdb{} page has a size of $64KiB$, of which the first sixteen bytes are the page header.
 
 In the following, we refer to field byte layouts with Go terms, always to be interpreted as big-endian encoded.
@@ -23,12 +36,12 @@ This field is an \go{uint32} field, containing the ID of this page.
 The amount of cells stored in that page.
 This is always equivalent to the amount of slots in the page.
 The field has a \go{uint16} type.
-In \autoref{fig:single_page}, this field has the value \go{0x00 0x03}.
+In \ref{fig:single_page}, this field has the value \go{0x00 0x03}.
 
 \paragraph{First free block}
 The offset of the \emph{free space} block in this page.
 The field has a \go{uint16} type.
-In \autoref{fig:single_page}, this field has the value \go{0x00 0x77} ($= 119$), which is the first byte of \emph{free space}.
+In \ref{fig:single_page}, this field has the value \go{0x00 0x77} ($= 119$), which is the first byte of \emph{free space}.
 
 \paragraph{Overflow}
 A \go{uint32} which holds a page ID.
@@ -43,21 +56,20 @@ With the reserved space, we have space for adding and removing new header fields
 \paragraph{Cells}
 On a more abstract level, a single cell is a key-value pair.
 The key is always arbitrary data, however, the value is not.
-There are two types of cells, record cells (\autoref{fig:single_record_cell}) and pointer cells (\autoref{fig:single_pointer_cell}).
+There are two types of cells, record cells (\ref{fig:single_record_cell}) and pointer cells (\ref{fig:single_pointer_cell}).
 Record cells have arbitrary data as their value, pointer cells hold a \go{uint32} value, which is a valid page ID.
 Thus, pointer cells point to another page, while record cells hold data.
 
 Cells are stored in the order that they were inserted.
-In \autoref{fig:single_page}, the insertion order was $1 \rightarrow 2 \rightarrow 3$.
+In \ref{fig:single_page}, the insertion order was $1 \rightarrow 2 \rightarrow 3$.
 
 \paragraph{Slots}
 Slots are the entry points of a page.
-They consist of an offset and a size, as can be seen in \autoref{fig:single_slot}.
+They consist of an offset and a size, as can be seen in \ref{fig:single_slot}.
 The offset is a \go{uint16} pointing to some cell within the same page, while the size is a \go{uint16} describing the length of that cell.
 
 Unlike cells, slots are not stored in the order that they were inserted, but they are always sorted by the cell key that they point to.
-In \autoref{fig:single_page}, the cell keys seem to have the relation $key(cell 2) < key(cell 3) < key(cell 1)$.
-
+In \ref{fig:single_page}, the cell keys seem to have the relation $key(cell 2) < key(cell 3) < key(cell 1)$.
 
 \begin{figure}
     \centering
@@ -125,3 +137,118 @@ In \autoref{fig:single_page}, the cell keys seem to have the relation $key(cell 
     \caption{A pointer cell}
     \label{fig:single_pointer_cell}
 \end{figure}
+
+\subsection{Database file}
+\label{sec:database_file}
+The database file is made up of pages only.
+This implies, that the size of a file is always a multiple of the page size, which is $64KiB$.
+Any other file size will make the engine fail to load the database file immediately.
+
+Pages may be located anywhere in the file, with one exception.
+The page with the \go{ID} $0$ is always at offset $0$, i.~e. at the very beginning of the file, as can be seen in \ref{fig:page_structure}.
+
+\begin{figure}
+    \centering
+    \begin{bytefield}[bitwidth=2em]{16}
+        \begin{rightwordgroup}{$64KiB$}
+            \wordbox{2}{Page 0}
+        \end{rightwordgroup} \\
+        \wordbox{2}{Page 1 \\ \tiny probably tables} \\
+        \wordbox{2}{Page 2 \\ \tiny probably config} \\
+        \wordbox{2}{Page 7} \\
+        \wordbox[tlr]{2}{more pages} \\
+        \skippedwords{} \\
+        \wordbox[blr]{1}{} \\
+        \wordbox{2}{Page 4} \\
+        \wordbox{2}{Page 5} \\
+    \end{bytefield}
+    \caption{Structure of a page}
+    \label{fig:page_structure}
+\end{figure}
+
+\subsubsection{Page 0}
+\label{sec:page_0}
+Page 0 is the meta page of the database.
+It contains pointer cells to other important pages.
+That is, Page 0 only holds pointer cells with well-defined\footnote{defined in this document, always constant} keys.
+These keys are the following.
+
+\begin{enumerate}
+    \item[\go{tables}] A page containing pointing to other tables, that then hold information on all tables. E.~g. the tables page has a pointer cell \emph{myTbl}, which points to Page 5. Page 5 then holds information about the data and index pages for \emph{myTbl}. See \ref{sec:tables_page}.
+    \item[\go{config}] A page that holds database-wide configuration. See \ref{sec:configuration_page}.
+\end{enumerate}
+
+\subsubsection{Tables page}
+\label{sec:tables_page}
+The tables page holds a single cell for each table in the database, with the fully qualified\footnote{\go{schema.tableName} or just \go{tableName}} table name.
+All these cells are pointer cells, which point to other pages, that hold information on that table.
+
+\paragraph{Table page}
+\label{par:table_page}
+Table pages are pages that hold information about a table, such as the name, indices and the data page.
+Note that column information are stored within the data page.
+
+\begin{enumerate}
+    \item[\go{name}] A record cell that holds the string representation of the table name. The value of the record is equal to the key of the pointer cell to this page in the tables page (\ref{sec:tables_page}).
+    \item[\go{colinfo}] A record cell holding a serialized representation of the tables column information, i.~e. column names and types (\ref{par:colinfo}).
+    \item[\go{data}] A pointer cell pointing to the data page of the table (\ref{par:data_page}).
+    \item[\go{index.<indexName>}] To be done, not supported yet.
+\end{enumerate}
+
+\paragraph{Column information}
+\label{par:colinfo}
+According to \ref{sec:types}, every type has an indicator byte, by which he can be uniquely identified.
+This is used here, to unambiguously serialize types using only a single byte.
+For parameterized types, this can be extended to require additional data if a certain type indicator is encountered.
+Column information are serialized in fragments (\ref{fig:col_info_fragment}).
+
+\begin{figure}[h]
+    \centering
+    \begin{bytefield}[bitwidth=2em]{8}
+        \bitheader{0-7} \\
+        \bitbox{1}{\tiny type indicator} &
+        \bitbox{4}{name frame} &
+        \bitbox[tlr]{3}{} \\
+        \wordbox[blr]{1}{col name} \\
+    \end{bytefield}
+    \caption{A column information fragment}
+    \label{fig:col_info_fragment}
+\end{figure}
+
+The first byte is the type indicator byte (\ref{par:type_indicator_bytes}), which is followed by a 4-byte big-endian unsigned frame that indicates the length of the then following column name\todo{column constraints}.
+
+\paragraph{Data page}
+\label{par:data_page}
+A data page contains of records of the table.
+One cell holds one whole record of the table.
+The key of that cell is the ROWID of that record (\todo{reference}).
+The structure of a serialized record can be seen in \ref{fig:serialized_record}.
+As can be seen in the figure, the serialized record does not hold any type or column information.
+This information must be inferred from the table page (\ref{par:table_page}).
+
+Every value in the figure is a 4-byte unsigned big-endian integer indicating the amount of bytes in the serialized value.
+Since in our type system, the type is responsible for serializing and deserializing, a record can be deserialized by inferring the type data for each column from the table page, and then deserializing the serialized value.
+
+\begin{figure}
+    \centering
+    \begin{bytefield}[bitwidth=2em]{8}
+        \bitheader{0-7} \\
+        \bitbox{4}{value frame} &
+        \bitbox[tlr]{4}{} \\
+        \wordbox[blr]{1}{serialized value} \\
+        \wordbox[tlr]{2}{more values} \\
+        \skippedwords{} \\
+        \wordbox[blr]{1}{} \\
+        \bitbox{4}{value frame} &
+        \bitbox[tlr]{4}{} \\
+        \wordbox[blr]{1}{serialized value} \\
+    \end{bytefield}
+    \caption{A serialized record}
+    \label{fig:serialized_record}
+\end{figure}
+
+\paragraph{ROWID}
+To avoid computing the highest ROWID upon loading a table's data page, the highest ROWID is stored in a record cell with the key \go{highestROWID} in the data page.
+
+\subsubsection{Configuration page}
+\label{sec:configuration_page}

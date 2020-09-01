@@ -11,24 +11,25 @@
 
 \begin{document}
 
-\pagenumbering{roman}
-
-\clearpage\maketitle
-\thispagestyle{empty}
-\newpage
-
-\setcounter{page}{1}
-\tableofcontents
-\newpage
-
-\pagenumbering{arabic}
-\setcounter{page}{1}
-
-\include{content/introduction}
-\include{content/parser}
-\include{content/compiler}
-\include{content/engine}
-\include{content/driver}
-\include{content/tools}
+    \include{titlepage}
+    
+    \pagenumbering{roman}
+    
+    \setcounter{page}{1}
+    \tableofcontents
+    \newpage
+    
+    \pagenumbering{arabic}
+    \setcounter{page}{1}
+    
+    \include{content/introduction}
+    \include{content/parser}
+    \include{content/compiler}
+    \include{content/engine}
+    \include{content/driver}
+    \include{content/tools}
+    
+    \bibliography{literature}{}
+    \bibliographystyle{plain}
 
 \end{document}
