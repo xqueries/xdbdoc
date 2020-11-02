@@ -186,7 +186,7 @@ All these cells are pointer cells, which point to other pages, that hold informa
 \paragraph{Table page}
 \label{par:table_page}
 Table pages are pages that hold information about a table, such as the name, indices and the data page.
-Note that column information are stored within the data page.
+Note that column information are stored within this table page, not the data page.
 
 \begin{enumerate}
     \item[\go{name}] A record cell that holds the string representation of the table name. The value of the record is equal to the key of the pointer cell to this page in the tables page (\ref{sec:tables_page}).
